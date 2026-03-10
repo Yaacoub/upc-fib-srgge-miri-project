@@ -1,0 +1,6 @@
+build/SRGGE
+build/CMakeFiles/*
+build/CMakeCache.txt
+build/cmake_install.cmake
+*.o
+*.o.d
