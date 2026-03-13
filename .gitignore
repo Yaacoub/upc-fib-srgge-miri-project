@@ -4,3 +4,5 @@ build/CMakeCache.txt
 build/cmake_install.cmake
 *.o
 *.o.d
+build/cmake_install.cmake
+build/Makefile
