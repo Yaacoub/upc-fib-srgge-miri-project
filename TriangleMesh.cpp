@@ -32,6 +32,12 @@ void TriangleMesh::addTriangle(int v0, int v1, int v2)
 	triangles.push_back(v2);
 }
 
+void TriangleMesh::addVertexAndColor(const glm::vec3 &position, const glm::vec3 &color)
+{
+    vertices.push_back(position);
+    colors.push_back(color);
+}
+
 void TriangleMesh::initVertices(const vector<float> &newVertices, const vector<float> &newColors)
 {
 	vertices.resize(newVertices.size() / 3);

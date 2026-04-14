@@ -26,6 +26,7 @@ public:
 
 	void addVertex(const glm::vec3 &position);
 	void addTriangle(int v0, int v1, int v2);
+	void addVertexAndColor(const glm::vec3 &position, const glm::vec3 &color);
 
 	void initVertices(const vector<float> &newVertices, const vector<float> &newColors);
 	void initTriangles(const vector<int> &newTriangles);
@@ -35,6 +36,10 @@ public:
 	void sendToOpenGL();
 	void render() const;
 	void free();
+
+	const vector<glm::vec3> &get_vertices() const { return vertices; }
+	const vector<glm::vec3> &get_colors() const { return colors; }
+	const vector<int> &get_triangles() const { return triangles; }
 
 private:
 	vector<glm::vec3> vertices;
