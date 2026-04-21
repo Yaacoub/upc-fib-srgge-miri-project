@@ -123,7 +123,7 @@ TriangleMesh *Scene::loadMesh(const string &filename, int lod_level = -1) const
 
             float resolutions[4] = {1024.0f, 512.0f, 256.0f, 128.0f};
             float target_resolution = resolutions[lod_level];
-			TriangleMesh* simplified_mesh = simplifyMesh(&original_mesh, 1.0f / target_resolution);
+			TriangleMesh* simplified_mesh = simplifyMeshQEM(&original_mesh, 1.0f / target_resolution);
             savePLYBinary(lod_filename, simplified_mesh);
 			delete mesh;
 			mesh = simplified_mesh; 
@@ -142,7 +142,7 @@ TriangleMesh *Scene::loadMesh(const string &filename, int lod_level = -1) const
 	return mesh;
 }
 
-TriangleMesh *Scene::simplifyMesh(const TriangleMesh* mesh, float cell_size) const
+TriangleMesh *Scene::simplifyMeshAVG(const TriangleMesh* mesh, float cell_size) const
 {
 	unordered_map<tuple<int, int, int>, Scene::Cell, TupleHash> grid;
 	TriangleMesh* mesh_simplified = new TriangleMesh();
@@ -154,10 +154,10 @@ TriangleMesh *Scene::simplifyMesh(const TriangleMesh* mesh, float cell_size) con
 	for (size_t v = 0; v < input_vertices.size(); ++v) {
 		glm::vec3 vertex = input_vertices[v];
 		// Compute which regular grid node contains it
-		int i = floor(vertex.x / cell_size);
-		int j = floor(vertex.y / cell_size);
-		int k = floor(vertex.z / cell_size);
-		tuple<int, int, int> cell_key = std::make_tuple(i, j, k);
+		int grid_x = static_cast<int>(floor(vertex.x / cell_size));
+		int grid_y = static_cast<int>(floor(vertex.y / cell_size));
+		int grid_z = static_cast<int>(floor(vertex.z / cell_size));
+		tuple<int, int, int> cell_key = make_tuple(grid_x, grid_y, grid_z);
 		// Add to sum and count
 		grid[cell_key].sum += vertex;
         grid[cell_key].color_sum += input_colors[v];
@@ -166,10 +166,102 @@ TriangleMesh *Scene::simplifyMesh(const TriangleMesh* mesh, float cell_size) con
 
 	for (auto& pair : grid) {
 		Scene::Cell &cell = pair.second;
-		// Add representative (average) to output mesh
+		// Add representative to output mesh
 		glm::vec3 average_color = cell.color_sum / (float)cell.count;
 		glm::vec3 average_vertex = cell.sum / (float)cell.count;
 		mesh_simplified->addVertexAndColor(average_vertex, average_color);
+		// Store the id of that output vertex in the node
+		cell.id = mesh_simplified->get_vertices().size() - 1; 
+	}
+
+	for (size_t t = 0; t < input_triangles.size(); t += 3) {
+		int vertices_i[3] = { input_triangles[t], input_triangles[t+1], input_triangles[t+2] };
+		int vertices_new_i[3];
+
+		for (int i = 0; i < 3; ++i) {
+			// Determine nodes that contain the original vertices
+			glm::vec3 vertex = input_vertices[vertices_i[i]];
+			int grid_x = static_cast<int>(floor(vertex.x / cell_size));
+			int grid_y = static_cast<int>(floor(vertex.y / cell_size));
+			int grid_z = static_cast<int>(floor(vertex.z / cell_size));
+			tuple<int, int, int> cell_key = make_tuple(grid_x, grid_y, grid_z);
+			// Update id using the one stored in the grid
+			vertices_new_i[i] = grid[cell_key].id;
+		}
+
+		// If triangle has unique ids output it
+		if (vertices_new_i[0] != vertices_new_i[1] && vertices_new_i[1] != vertices_new_i[2] && vertices_new_i[2] != vertices_new_i[0]) {
+			mesh_simplified->addTriangle(vertices_new_i[0], vertices_new_i[1], vertices_new_i[2]);
+		}
+	}
+
+	return mesh_simplified;
+}
+
+TriangleMesh *Scene::simplifyMeshQEM(const TriangleMesh* mesh, float cell_size) const
+{
+	unordered_map<tuple<int, int, int>, Scene::Cell, TupleHash> grid;
+	TriangleMesh* mesh_simplified = new TriangleMesh();
+
+	const vector<glm::vec3> &input_colors = mesh->get_colors();
+	const vector<glm::vec3> &input_vertices = mesh->get_vertices();
+	const vector<int> &input_triangles = mesh->get_triangles();
+
+	for (size_t t = 0; t < input_triangles.size(); t += 3) {
+		int vertices_i[3] = { input_triangles[t], input_triangles[t+1], input_triangles[t+2] };
+
+		for (int i = 0; i < 3; ++i) {
+			// Determine node that contain the original vertex
+			glm::vec3 vertex = input_vertices[vertices_i[i]];
+			int grid_x = static_cast<int>(floor(vertex.x / cell_size));
+			int grid_y = static_cast<int>(floor(vertex.y / cell_size));
+			int grid_z = static_cast<int>(floor(vertex.z / cell_size));
+			tuple<int, int, int> cell_key = make_tuple(grid_x, grid_y, grid_z);
+
+			grid[cell_key].sum += vertex;
+        	grid[cell_key].color_sum += input_colors[vertices_i[i]];
+        	grid[cell_key].count += 1;
+
+			// Compute quadric from plane
+			// Compute plane of T in coordinates relative to the node’s center
+			glm::vec3 node_center((grid_x + 0.5f) * cell_size, (grid_y + 0.5f) * cell_size,(grid_z + 0.5f) * cell_size);
+			grid[cell_key].center = node_center;
+
+			glm::vec3 e1 = input_vertices[vertices_i[1]] - input_vertices[vertices_i[0]];
+			glm::vec3 e2 = input_vertices[vertices_i[2]] - input_vertices[vertices_i[0]];
+			glm::vec3 normal = glm::normalize(glm::cross(e1, e2));
+			glm::vec4 q = glm::vec4(normal, -glm::dot(normal, input_vertices[vertices_i[0]] - node_center));
+			Eigen::Vector4d qq(q[0], q[1], q[2], q[3]);
+			Eigen::Matrix4d Qq = qq * qq.transpose();
+
+			// Add quadric to matrix inside node
+			grid[cell_key].quadric_sum += Qq;
+		}
+	}
+
+	// Compute representatives using quadrics and update triangles
+	for (auto& pair : grid) {
+		Scene::Cell &cell = pair.second;
+
+		Eigen::Matrix4d A = cell.quadric_sum;
+		Eigen::Vector4d B(0, 0, 0, 1);
+		A.row(3) << 0, 0, 0, 1;
+		
+		Eigen::JacobiSVD<Eigen::Matrix4d> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
+		Eigen::Matrix<double, 4, 1> sigma = svd.singularValues();
+		Eigen::Matrix4d sigma_plus = Eigen::Matrix4d::Zero();
+		for (int i = 0; i < 4; ++i) {
+			if (sigma(i) > 1e-6) sigma_plus(i, i) = 1.0 / sigma(i);
+		}
+		
+		Eigen::Matrix4d A_plus = svd.matrixV() * sigma_plus * svd.matrixU().transpose();
+		Eigen::Vector4d p_star = A_plus * B;
+
+		// Add representative to output mesh
+		glm::vec3 final_vertex = glm::vec3(p_star[0], p_star[1], p_star[2]) + cell.center;
+		glm::vec3 average_color = cell.color_sum / (float)cell.count; // Weighted average
+		mesh_simplified->addVertexAndColor(final_vertex, average_color);
+
 		// Store the id of that output vertex in the node
 		cell.id = mesh_simplified->get_vertices().size() - 1; 
 	}
@@ -184,13 +276,12 @@ TriangleMesh *Scene::simplifyMesh(const TriangleMesh* mesh, float cell_size) con
 		for (int i = 0; i < 3; ++i) {
 			// Determine nodes that contain the original vertices
 			glm::vec3 vertex = input_vertices[vertices_i[i]];
-			tuple<int, int, int> cell = make_tuple(
-				static_cast<int>(floor(vertex.x / cell_size)), 
-				static_cast<int>(floor(vertex.y / cell_size)), 
-				static_cast<int>(floor(vertex.z / cell_size))
-			);
+			int grid_x = static_cast<int>(floor(vertex.x / cell_size));
+			int grid_y = static_cast<int>(floor(vertex.y / cell_size));
+			int grid_z = static_cast<int>(floor(vertex.z / cell_size));
+			tuple<int, int, int> cell_key = make_tuple(grid_x, grid_y, grid_z);
 			// Update id using the one stored in the grid
-			vertices_new_i[i] = grid[cell].id;
+			vertices_new_i[i] = grid[cell_key].id;
 		}
 
 		// If triangle has unique ids output it

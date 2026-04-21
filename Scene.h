@@ -2,6 +2,7 @@
 #define _SCENE_INCLUDE
 
 
+#include <eigen3/Eigen/Dense>
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <vector>
@@ -27,7 +28,8 @@ public:
 	void init();
 	bool loadMap(const string &filename);
 	TriangleMesh *loadMesh(const string &filename, int lod_level) const;
-	TriangleMesh *simplifyMesh(const TriangleMesh* input_mesh, float cell_size) const;
+	TriangleMesh *simplifyMeshAVG(const TriangleMesh* input_mesh, float cell_size) const;
+	TriangleMesh *simplifyMeshQEM(const TriangleMesh* input_mesh, float cell_size) const;
 	void savePLYBinary(const string& filename, const TriangleMesh* mesh) const;
 	void update(int deltaTime);
 	void render();
@@ -37,8 +39,10 @@ public:
 	struct Cell {
 		int count = 0;
 		int id = -1; // ID of the representative vertex
+		glm::vec3 center = glm::vec3(0.0f);
 		glm::vec3 sum = glm::vec3(0.0f);
     	glm::vec3 color_sum = glm::vec3(0.0f);
+		Eigen::Matrix4d quadric_sum = Eigen::Matrix4d::Zero();
 	};
 
 	struct TupleHash {
