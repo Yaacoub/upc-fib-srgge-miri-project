@@ -30,9 +30,9 @@
 1111111111111111111111111100000000000001
 1111111111111111111111111111111111111111
 3
-models/textured/ArmadilloJade.ply -1
-models/bunny.ply 2
-models/dragon.ply 1
+models/textured/ArmadilloJade.ply 3
+models/bunny.ply 3
+models/dragon.ply 3
 23
 2
 31 0 15

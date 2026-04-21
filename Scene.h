@@ -30,6 +30,7 @@ public:
 	TriangleMesh *loadMesh(const string &filename, int lod_level) const;
 	TriangleMesh *simplifyMeshAVG(const TriangleMesh* input_mesh, float cell_size) const;
 	TriangleMesh *simplifyMeshQEM(const TriangleMesh* input_mesh, float cell_size) const;
+	TriangleMesh *simplifyMeshQEMClustering(const TriangleMesh* input_mesh, float cell_size) const;
 	void savePLYBinary(const string& filename, const TriangleMesh* mesh) const;
 	void update(int deltaTime);
 	void render();
@@ -46,12 +47,13 @@ public:
 	};
 
 	struct TupleHash {
-		size_t operator()(const tuple<int, int, int>& t) const {
+		size_t operator()(const tuple<int, int, int, int>& t) const {
 			size_t h1 = hash<int>{}(get<0>(t));
 			size_t h2 = hash<int>{}(get<1>(t));
 			size_t h3 = hash<int>{}(get<2>(t));
+			size_t h4 = hash<int>{}(get<3>(t));
 			// Combine the hashes (simple combination)
-			return h1 ^ (h2 << 1) ^ (h3 << 2); 
+			return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3); 
 		}
 	};
 
