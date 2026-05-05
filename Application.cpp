@@ -116,6 +116,7 @@ void Application::keyPressed(int key)
 }
 
 // F1 enters and exits the navigation mode
+// F2 toggles the LOD debug mode
 // F5 does the same for fullscreen mode
 
 void Application::keyReleased(int key)
@@ -149,6 +150,9 @@ void Application::keyReleased(int key)
 			glfwSetInputMode(mainWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		else
 			glfwSetInputMode(mainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		break;
+	case GLFW_KEY_F2:
+		scene.setShowLODColors(!scene.getShowLODColors());
 		break;
 	case GLFW_KEY_F5:
 		bFullscreen = !bFullscreen;

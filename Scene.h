@@ -27,15 +27,19 @@ public:
 
 	void init();
 	bool loadMap(const string &filename);
-	TriangleMesh *loadMesh(const string &filename, int lod_level) const;
+	vector<TriangleMesh*> loadMesh(const string &filename, bool isLODEnabled) const;
 	TriangleMesh *simplifyMeshAVG(const TriangleMesh* input_mesh, float cell_size) const;
 	TriangleMesh *simplifyMeshQEM(const TriangleMesh* input_mesh, float cell_size) const;
 	TriangleMesh *simplifyMeshQEMClustering(const TriangleMesh* input_mesh, float cell_size) const;
+	void optimizeLODs(const glm::vec3& cameraPos);
 	void savePLYBinary(const string& filename, const TriangleMesh* mesh) const;
 	void update(int deltaTime);
 	void render();
 
 	VectorCamera &getCamera();
+
+	void setShowLODColors(bool value) { showLODColors = value; }
+	bool getShowLODColors() { return showLODColors; }
 
 	struct Cell {
 		int count = 0;
@@ -57,6 +61,15 @@ public:
 		}
 	};
 
+	struct LODUpgrade {
+		TriangleMeshInstance* obj;
+		int targetLOD;
+		int cost;
+		float ratio;
+		// Tell std::sort to arrange Highest Ratio to Lowest Ratio
+		bool operator<(const LODUpgrade& other) const { return ratio > other.ratio; }
+	};
+
 private:
 	void computeModelViewMatrix();
 	
@@ -64,10 +77,11 @@ private:
 
 private:
 	VectorCamera camera;
-	TriangleMesh *meshCube, *meshWall, *meshBase;
-	vector<TriangleMesh *> meshFigurines;
+	vector<TriangleMesh*> meshCube, meshWall, meshBase;
+	vector<vector<TriangleMesh*>> meshFigurines;
 	vector<TriangleMeshInstance *> objects;
 	float currentTime;
+	bool showLODColors = false;
 
 };
 

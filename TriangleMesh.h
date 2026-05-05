@@ -41,6 +41,9 @@ public:
 	const vector<glm::vec3> &get_colors() const { return colors; }
 	const vector<int> &get_triangles() const { return triangles; }
 
+	float getBoundingBoxDiagonal() const;
+	int getTriangleCount() const { return triangles.size() / 3; }
+
 private:
 	vector<glm::vec3> vertices;
 	vector<glm::vec3> colors;

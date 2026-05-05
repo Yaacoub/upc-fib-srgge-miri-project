@@ -145,3 +145,17 @@ void TriangleMesh::free()
 	colors.clear();
 	triangles.clear();
 }
+
+float TriangleMesh::getBoundingBoxDiagonal() const {
+	if (vertices.empty()) return 0.0f;
+
+	glm::vec3 minExtents = vertices[0];
+	glm::vec3 maxExtents = vertices[0];
+
+	for (const auto& v : vertices) {
+		minExtents = glm::min(minExtents, v);
+		maxExtents = glm::max(maxExtents, v);
+	}
+
+	return glm::distance(minExtents, maxExtents);
+}

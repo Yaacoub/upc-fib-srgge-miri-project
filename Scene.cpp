@@ -8,25 +8,20 @@
 #include "Application.h"
 
 
+#define LOD_LEVELS 4
+
+
 Scene::Scene()
 {
-	meshCube = NULL;
-	meshFigurines = {};
-	meshWall = NULL;
 }
 
 Scene::~Scene()
 {
-	if(meshCube != NULL)
-		delete meshCube;
-	if(meshWall != NULL)
-		delete meshWall;
-	if(meshBase != NULL)
-		delete meshBase;
-	for(vector<TriangleMesh *>::iterator it=meshFigurines.begin(); it!=meshFigurines.end(); it++)
-		delete *it;
-	for(vector<TriangleMeshInstance *>::iterator it=objects.begin(); it!=objects.end(); it++)
-		delete *it;
+	for (auto mesh: meshCube) delete mesh;
+	for (auto mesh: meshWall) delete mesh;
+	for (auto mesh: meshBase) delete mesh;
+	for (auto& figurineGroup : meshFigurines) for (auto mesh : figurineGroup) delete mesh;
+	for (auto obj : objects)  delete obj;
 }
 
 
@@ -35,9 +30,10 @@ Scene::~Scene()
 
 void Scene::init()
 {
-	meshCube = new TriangleMesh();
-	meshCube->buildCube();
-	meshCube->sendToOpenGL();
+	TriangleMesh* cube = new TriangleMesh();
+	cube->buildCube();
+	cube->sendToOpenGL();
+	meshCube.push_back(cube);
 	currentTime = 0.0f;
 	
 	camera.init(glm::vec3(0.f, 1.0f, 2.f));
@@ -52,10 +48,8 @@ bool Scene::loadMap(const string &filename)
 	int models_count, models_i;
 	int map_w, map_h;
 
-	if((meshWall = loadMesh("models/room/Wall.ply", -1)) == NULL)
-		return false;
-	if((meshBase = loadMesh("models/room/Base.ply", -1)) == NULL)
-		return false;
+	meshWall = loadMesh("models/room/Wall.ply", false);
+	meshBase = loadMesh("models/room/Base.ply", false);
 
 	fin.open(filename);
 	if(!fin.is_open())
@@ -71,12 +65,10 @@ bool Scene::loadMap(const string &filename)
 
 	fin >> models_count;
 	for (models_i = 0; models_i < models_count; ++models_i) {
-		int lod_level;
-		fin >> model_filename >> lod_level;
+		fin >> model_filename;
 		TriangleMesh *meshFigurine;
-		if((meshFigurine = loadMesh(model_filename, lod_level)) == NULL) 
-			break;
-		meshFigurines.push_back(meshFigurine);
+		vector<TriangleMesh*> figurineLODs = loadMesh(model_filename, true);
+		meshFigurines.push_back(figurineLODs);
 	}
 	if (models_i != models_count)
 		return false;
@@ -87,20 +79,20 @@ bool Scene::loadMap(const string &filename)
 
 // Loads the mesh into CPU memory and sends it to GPU memory (using GL)
 
-TriangleMesh *Scene::loadMesh(const string &filename, int lod_level = -1) const
+vector<TriangleMesh*> Scene::loadMesh(const string &filename, bool isLODEnabled) const
 {
-	TriangleMesh *mesh;
+	vector<TriangleMesh*> meshes;
 #pragma warning( push )
 #pragma warning( disable : 4101)
 	PLYReader reader;
 #pragma warning( pop ) 
 
-	mesh = new TriangleMesh();
-
 	// Load the original mesh
-	if (lod_level == -1) {
+	if (!isLODEnabled) {
+		TriangleMesh* mesh = new TriangleMesh();
 		if (reader.readMesh(filename, *mesh)) {
 			mesh->sendToOpenGL();
+			meshes.push_back(mesh);
 		} else {
 			delete mesh;
 			mesh = nullptr;
@@ -109,37 +101,35 @@ TriangleMesh *Scene::loadMesh(const string &filename, int lod_level = -1) const
 	
 	// Handle LOD generation and loading
 	else {
-		string base_filename = filename.substr(0, filename.find_last_of("."));
-		string lod_filename = base_filename + "_LOD" + to_string(lod_level) + ".ply";
-		ifstream file_check(lod_filename);
+		float resolutions[LOD_LEVELS] = {1024.0f, 512.0f, 256.0f, 128.0f};
+		for (int lod_level = 0; lod_level < LOD_LEVELS; ++lod_level) {
+			TriangleMesh* mesh = new TriangleMesh();
+			string base_filename = filename.substr(0, filename.find_last_of("."));
+			string lod_filename = base_filename + "_LOD" + to_string(lod_level) + ".ply";
+			ifstream file_check(lod_filename);
 
-		if (!file_check.good()) {
-			file_check.close();
-			TriangleMesh original_mesh;
-			if (!reader.readMesh(filename, original_mesh)) {
+			if (!file_check.good()) {
+				file_check.close();
+				TriangleMesh original_mesh;
+				reader.readMesh(filename, original_mesh);
+
+				float target_resolution = resolutions[lod_level];
+				TriangleMesh* simplified_mesh = simplifyMeshQEMClustering(&original_mesh, 1.0f / target_resolution);
+				savePLYBinary(lod_filename, simplified_mesh);
+
 				delete mesh;
-				return nullptr;
-			}
-
-			float resolutions[4] = {1024.0f, 512.0f, 256.0f, 128.0f};
-			float target_resolution = resolutions[lod_level];
-			TriangleMesh* simplified_mesh = simplifyMeshQEMClustering(&original_mesh, 1.0f / target_resolution);
-			savePLYBinary(lod_filename, simplified_mesh);
-			delete mesh;
-			mesh = simplified_mesh; 
-			mesh->sendToOpenGL();
-		} else {
-			file_check.close();
-			if (reader.readMesh(lod_filename, *mesh)) {
-				mesh->sendToOpenGL();
+				mesh = simplified_mesh; 
 			} else {
-				delete mesh;
-				mesh = nullptr;
+				file_check.close();
+				reader.readMesh(lod_filename, *mesh);
 			}
+
+			mesh->sendToOpenGL();
+			meshes.push_back(mesh);
 		}
 	}
 
-	return mesh;
+	return meshes;
 }
 
 TriangleMesh *Scene::simplifyMeshAVG(const TriangleMesh* mesh, float cell_size) const
@@ -419,6 +409,70 @@ TriangleMesh *Scene::simplifyMeshQEMClustering(const TriangleMesh* mesh, float c
 	return mesh_simplified;
 }
 
+void Scene::optimizeLODs(const glm::vec3& cameraPos) {
+    float targetFPS = 60.0f;
+    float machineTPS = 150000000.0f; // Empirical value
+    int maxCost = static_cast<int>(machineTPS / targetFPS);
+    int currentCost = 0;
+
+    // Calculate static cost
+    int staticCost = 0;
+    for (auto obj : objects) {
+        if (!obj->getIsLODEnabled()) {
+            staticCost += obj->getMesh()->getTriangleCount();
+        }
+    }
+    maxCost -= staticCost;
+	
+	std::vector<LODUpgrade> possibleUpgrades;
+    possibleUpgrades.reserve(objects.size() * (LOD_LEVELS - 1)); // Memory optimization
+
+    // Start with lowest LOD for all objects
+	// Determine total cost of those objects
+    for (auto obj : objects) {
+        if (!obj->getIsLODEnabled()) continue;
+        obj->setCurrentLOD(LOD_LEVELS - 1);
+        currentCost += obj->getMesh()->getTriangleCount();
+		
+		float D = glm::max(glm::distance(glm::vec3(obj->getTransform()[3]), cameraPos), 0.001f);
+        float d = obj->getBoundingBoxDiagonal();
+
+		for (int index_curr = LOD_LEVELS - 1; index_curr > 0; --index_curr) {
+			int index_next = index_curr - 1;
+            
+			int LOD_curr = LOD_LEVELS - index_curr;
+    		int LOD_next = LOD_LEVELS - index_next;
+			
+			float benefit_curr = 1.0f - (d / (static_cast<float>(1 << LOD_curr) * D));
+            float benefit_next = 1.0f - (d / (static_cast<float>(1 << LOD_next) * D));
+
+            float deltaBenefit = benefit_next - benefit_curr;
+            int deltaCost = obj->getTriangleCount(index_next) - obj->getTriangleCount(index_curr);
+
+            if (deltaCost > 0) {
+                float ratio = deltaBenefit / static_cast<float>(deltaCost);
+                possibleUpgrades.push_back({obj, index_next, deltaCost, ratio});
+            }
+        }
+    }
+
+	std::sort(possibleUpgrades.begin(), possibleUpgrades.end());
+
+	// Find object with largest ∆benefit / ∆cost
+    for (const auto& upgrade : possibleUpgrades) {
+		if (currentCost + upgrade.cost <= maxCost) {
+			// Increase LOD for that object
+			// Update total cost
+            if (upgrade.obj->getCurrentLOD() == upgrade.targetLOD + 1) {
+                upgrade.obj->setCurrentLOD(upgrade.targetLOD);
+                currentCost += upgrade.cost;
+            }
+        } else {
+            break; 
+        }
+    }
+}
+
 void Scene::savePLYBinary(const string& filename, const TriangleMesh* mesh) const
 {
 	ofstream fout(filename, ios::out | ios::binary);
@@ -478,6 +532,7 @@ void Scene::savePLYBinary(const string& filename, const TriangleMesh* mesh) cons
 void Scene::update(int deltaTime)
 {
 	currentTime += deltaTime;
+	optimizeLODs(camera.getPosition());
 }
 
 // Render the scene. First the room, then the mesh it there is one loaded.
@@ -487,7 +542,7 @@ void Scene::render()
 	Application::instance().getShader()->use();
 	camera.render();
 	for(vector<TriangleMeshInstance *>::iterator it=objects.begin(); it!=objects.end(); it++)
-		(*it)->render();
+		(*it)->render(getShowLODColors());
 }
 
 VectorCamera &Scene::getCamera()

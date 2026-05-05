@@ -4,6 +4,7 @@ uniform vec4 color;
 uniform float metallic;
 uniform float roughness;
 uniform vec3 viewPos;
+uniform bool showLODColors;
 
 in vec3 normalFrag;
 in vec3 fragPos;
@@ -51,7 +52,7 @@ void main()
 
 	vec3 N = normalize(normalFrag);
 	vec3 V = normalize(viewPos - fragPos);
-	vec3 albedo = pow(color.rgb * vertexColor, vec3(2.2));
+	vec3 albedo = pow(showLODColors ? color.rgb : (color.rgb * vertexColor), vec3(2.2));
 	float metal = clamp(metallic, 0.0, 1.0);
 	float rough = clamp(roughness, 0.04, 1.0);
 	float alpha = rough * rough;
