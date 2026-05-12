@@ -10,6 +10,7 @@ TriangleMeshInstance::TriangleMeshInstance()
 	roughness = 1.0f;
 	currentLOD = 0;
 	isLODEnabled = false;
+	waitFrames = 0;
 }
 
 TriangleMeshInstance::~TriangleMeshInstance()
@@ -119,6 +120,17 @@ void TriangleMeshInstance::setCurrentLOD(int LOD)
 	this->currentLOD = LOD;
 }
 
+void TriangleMeshInstance::setWaitFrames(int frames)
+{
+	this->waitFrames = frames;
+}
+
+void TriangleMeshInstance::updateWaitFrames()
+{
+	if (this->waitFrames > 0)
+		this->waitFrames--;
+}
+
 float TriangleMeshInstance::getMetallic() const
 {
 	return metallic;
@@ -137,6 +149,11 @@ int TriangleMeshInstance::getCurrentLOD() const
 bool TriangleMeshInstance::getIsLODEnabled() const
 {
 	return isLODEnabled;
+}
+
+int TriangleMeshInstance::getWaitFrames() const
+{
+	return waitFrames;
 }
 
 float TriangleMeshInstance::getBoundingBoxDiagonal() const {

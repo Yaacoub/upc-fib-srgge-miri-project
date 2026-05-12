@@ -427,10 +427,21 @@ void Scene::optimizeLODs(const glm::vec3& cameraPos) {
 	std::vector<LODUpgrade> possibleUpgrades;
     possibleUpgrades.reserve(objects.size() * (LOD_LEVELS - 1)); // Memory optimization
 
+	std::vector<int> originalLODs(objects.size());
+
     // Start with lowest LOD for all objects
 	// Determine total cost of those objects
-    for (auto obj : objects) {
+    for (size_t i = 0; i < objects.size(); ++i) {
+        TriangleMeshInstance* obj = objects[i];
         if (!obj->getIsLODEnabled()) continue;
+
+		// Hysteresis transition
+		originalLODs[i] = obj->getCurrentLOD();
+		if (obj->getWaitFrames() > 0) {
+            currentCost += obj->getMesh()->getTriangleCount();
+            continue; 
+        }
+
         obj->setCurrentLOD(LOD_LEVELS - 1);
         currentCost += obj->getMesh()->getTriangleCount();
 		
@@ -469,6 +480,16 @@ void Scene::optimizeLODs(const glm::vec3& cameraPos) {
             }
         } else {
             break; 
+        }
+    }
+
+	// Hysteresis transition
+	const int N_FRAMES = 60 * 2; // 2 seconds
+    for (size_t i = 0; i < objects.size(); ++i) {
+        auto obj = objects[i];
+        if (!obj->getIsLODEnabled()) continue;
+        if (obj->getCurrentLOD() != originalLODs[i]) {
+            obj->setWaitFrames(N_FRAMES);
         }
     }
 }
@@ -532,6 +553,8 @@ void Scene::savePLYBinary(const string& filename, const TriangleMesh* mesh) cons
 void Scene::update(int deltaTime)
 {
 	currentTime += deltaTime;
+	for (auto obj : objects)
+		obj->updateWaitFrames();
 	optimizeLODs(camera.getPosition());
 }
 

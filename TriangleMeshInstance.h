@@ -34,10 +34,13 @@ public:
 	const glm::vec4 &getColor() const;
 	void setMaterial(float metallic, float roughness);
 	void setCurrentLOD(int LOD);
+	void setWaitFrames(int frames);
+	void updateWaitFrames();
 	float getMetallic() const;
 	float getRoughness() const;
 	int getCurrentLOD() const;
 	bool getIsLODEnabled() const;
+	int getWaitFrames() const;
 
 	float getBoundingBoxDiagonal() const;
 	int getTriangleCount(int LOD) const { return meshes[LOD]->getTriangleCount(); }
@@ -49,8 +52,9 @@ private:
 	glm::mat4 transform;
 	float metallic;
 	float roughness;
-	int currentLOD = 0;
+	int currentLOD;
 	bool isLODEnabled;
+	int waitFrames;
 
 };
 
