@@ -35,9 +35,9 @@ void Application::init(GLFWwindow* window)
 
 // Load the map into the scene
 
-bool Application::loadMap(const string &filename)
+bool Application::loadMap(const string &map_filename, const string &visibility_filename)
 {
-	return scene.loadMap(filename);
+	return scene.loadMap(map_filename, visibility_filename);
 }
 
 // Update any animations or state in the scene
@@ -47,7 +47,7 @@ bool Application::update(int deltaTime)
 {
 	scene.update(deltaTime);
 	
-	if(bNavigation)
+	if(bNavigation && !scene.getShowBirdEyeView())
 	{
 		float move = deltaTime / 1000.f * MOVEMENT_SPEED;
 		if(shift)
@@ -117,7 +117,8 @@ void Application::keyPressed(int key)
 
 // F1 enters and exits the navigation mode
 // F2 toggles the LOD debug mode
-// F5 does the same for fullscreen mode
+// F3 toggles the camera debug view
+// F5 enters and exists fullscreen mode
 
 void Application::keyReleased(int key)
 {
@@ -153,6 +154,9 @@ void Application::keyReleased(int key)
 		break;
 	case GLFW_KEY_F2:
 		scene.setShowLODColors(!scene.getShowLODColors());
+		break;
+	case GLFW_KEY_F3:
+		scene.setShowBirdEyeView(!scene.getShowBirdEyeView());
 		break;
 	case GLFW_KEY_F5:
 		bFullscreen = !bFullscreen;
@@ -241,7 +245,3 @@ ShaderProgram *Application::getShader()
 {
 	return &basicProgram;
 }
-
-
-
-

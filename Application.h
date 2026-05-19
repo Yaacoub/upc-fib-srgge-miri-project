@@ -25,7 +25,7 @@ public:
 	}
 	
 	void init(GLFWwindow* window);
-	bool loadMap(const string &filename);
+	bool loadMap(const string &map_filename, const string &visibility_filename);
 	bool update(int deltaTime);
 	void render();
 	

@@ -5,6 +5,7 @@
 #include <eigen3/Eigen/Dense>
 #include <glm/glm.hpp>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 #include "VectorCamera.h"
 #include "TriangleMesh.h"
@@ -26,19 +27,23 @@ public:
 	~Scene();
 
 	void init();
-	bool loadMap(const string &filename);
+	bool loadMap(const string &filename, const string &visibility_filename);
 	vector<TriangleMesh*> loadMesh(const string &filename, bool isLODEnabled) const;
 	TriangleMesh *simplifyMeshAVG(const TriangleMesh* input_mesh, float cell_size) const;
 	TriangleMesh *simplifyMeshQEM(const TriangleMesh* input_mesh, float cell_size) const;
 	TriangleMesh *simplifyMeshQEMClustering(const TriangleMesh* input_mesh, float cell_size) const;
 	void optimizeLODs(const glm::vec3& cameraPos);
+	bool loadVisibility(const string &filename);
 	void savePLYBinary(const string& filename, const TriangleMesh* mesh) const;
 	void update(int deltaTime);
 	void render();
 
 	VectorCamera &getCamera();
 
+	void setShowBirdEyeView(bool value) { showBirdEyeView = value; }
 	void setShowLODColors(bool value) { showLODColors = value; }
+
+	bool getShowBirdEyeView() { return showBirdEyeView; }
 	bool getShowLODColors() { return showLODColors; }
 
 	struct Cell {
@@ -81,10 +86,15 @@ private:
 	vector<vector<TriangleMesh*>> meshFigurines;
 	vector<TriangleMeshInstance *> objects;
 	float currentTime;
+	bool showBirdEyeView = false;
 	bool showLODColors = false;
+	int mapWidth = 0;
+	int mapHeight = 0;
+	float offsetX = 0.0f;
+	float offsetZ = 0.0f;
+	std::vector<std::vector<std::vector<std::pair<int, int>>>> visibilityGrid;
 
 };
 
 
 #endif // _SCENE_INCLUDE
-

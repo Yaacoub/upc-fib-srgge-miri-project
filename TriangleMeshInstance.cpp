@@ -125,6 +125,12 @@ void TriangleMeshInstance::setWaitFrames(int frames)
 	this->waitFrames = frames;
 }
 
+void TriangleMeshInstance::setCell(int x, int y)
+{
+	this->cellX = x;
+	this->cellY = y;
+}
+
 void TriangleMeshInstance::updateWaitFrames()
 {
 	if (this->waitFrames > 0)
@@ -154,6 +160,16 @@ bool TriangleMeshInstance::getIsLODEnabled() const
 int TriangleMeshInstance::getWaitFrames() const
 {
 	return waitFrames;
+}
+
+int TriangleMeshInstance::getCellX() const
+{
+	return cellX;
+}
+
+int TriangleMeshInstance::getCellY() const
+{
+	return cellY;
 }
 
 float TriangleMeshInstance::getBoundingBoxDiagonal() const {

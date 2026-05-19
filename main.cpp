@@ -95,8 +95,8 @@ int main(int argc, char *argv[])
 	Application::instance().init(window);
 	Application::instance().resize(VIEWPORT_INIT_WIDTH, VIEWPORT_INIT_HEIGHT);
 
-	if(argc > 1)
-	  Application::instance().loadMap(argv[1]);
+	if(argc > 2)
+	  Application::instance().loadMap(argv[1], argv[2]);
 	  
 	timePreviousFrame = glfwGetTime();
 	

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <cmath>
 #define GLM_FORCE_RADIANS
@@ -41,23 +42,22 @@ void Scene::init()
 
 // Load the map & all its associated models
 
-bool Scene::loadMap(const string &filename)
+bool Scene::loadMap(const string &map_filename, const string &visibility_filename)
 {
 	ifstream fin;
 	string model_filename;
 	int models_count, models_i;
-	int map_w, map_h;
 
 	meshWall = loadMesh("models/room/Wall.ply", false);
 	meshBase = loadMesh("models/room/Base.ply", false);
 
-	fin.open(filename);
+	fin.open(map_filename);
 	if(!fin.is_open())
 		return false;
 
-	fin >> map_w >> map_h;
+	fin >> mapWidth >> mapHeight;
 	vector<string> map_grid;
-	for (int y = 0; y < map_h; ++y) {
+	for (int y = 0; y < mapHeight; ++y) {
 		string row;
 		fin >> row;
 		map_grid.push_back(row);
@@ -73,7 +73,8 @@ bool Scene::loadMap(const string &filename)
 	if (models_i != models_count)
 		return false;
 
-	buildRoom(fin, map_grid, map_w, map_h);
+	buildRoom(fin, map_grid, mapWidth, mapHeight);
+	loadVisibility(visibility_filename);
 	return true;
 }
 
@@ -494,6 +495,28 @@ void Scene::optimizeLODs(const glm::vec3& cameraPos) {
     }
 }
 
+bool Scene::loadVisibility(const string &filename)
+{
+    ifstream fin(filename);
+    if (!fin.is_open()) return false;
+
+    int w, h;
+    fin >> w >> h;
+    visibilityGrid.resize(h, vector<vector<pair<int, int>>>(w));
+
+    for (int i = 0; i < w * h; ++i) {
+        int x, y, count;
+        fin >> x >> y >> count;
+        for (int j = 0; j < count; ++j) {
+            int vx, vy;
+            fin >> vx >> vy;
+            visibilityGrid[y][x].push_back({vx, vy});
+        }
+    }
+    fin.close();
+    return true;
+}
+
 void Scene::savePLYBinary(const string& filename, const TriangleMesh* mesh) const
 {
 	ofstream fout(filename, ios::out | ios::binary);
@@ -564,8 +587,53 @@ void Scene::render()
 {
 	Application::instance().getShader()->use();
 	camera.render();
-	for(vector<TriangleMeshInstance *>::iterator it=objects.begin(); it!=objects.end(); it++)
-		(*it)->render(getShowLODColors());
+
+	glm::vec3 camPos = camera.getPosition();
+
+	if (getShowBirdEyeView()) {
+		glm::mat4 view = glm::lookAt(
+			glm::vec3(0.0f, 25.0f, 0.0f), 
+			glm::vec3(0.0f, 0.0f, 0.0f), 
+			glm::vec3(0.0f, 0.0f, -1.0f)
+		);
+		Application::instance().getShader()->setUniformMatrix4f("view", view);
+	}
+
+	// Cell to cell visibility
+	int camX = std::max(0, std::min(mapWidth - 1, (int)std::round(camPos.x - offsetX)));
+	int camY = std::max(0, std::min(mapHeight - 1, (int)std::round(camPos.z - offsetZ)));
+
+	std::vector<bool> visibleCells(mapWidth * mapHeight, false);
+	bool hasVisibilityData = !visibilityGrid.empty();
+	
+	if (hasVisibilityData) {
+		for (const auto& cell : visibilityGrid[camY][camX]) {
+			visibleCells[cell.second * mapWidth + cell.first] = true;
+		}
+	}
+
+	for (auto it = objects.begin(); it != objects.end(); ++it) {
+		TriangleMeshInstance* obj = *it;
+
+		// Hide ceilings
+		if (getShowBirdEyeView() && !obj->getIsLODEnabled() && obj->getTransform()[3].y >= 2.0f) {
+			continue;
+		}
+		
+		if (hasVisibilityData && obj->getIsLODEnabled()) {
+			int cx = obj->getCellX();
+			int cy = obj->getCellY();
+
+			if (cx >= 0 && cx < mapWidth && cy >= 0 && cy < mapHeight) {
+				// Behind wall
+				if (!visibleCells[cy * mapWidth + cx]) {
+					continue;
+				}
+			}
+		}
+		
+		obj->render(getShowLODColors());
+	}
 }
 
 VectorCamera &Scene::getCamera()
@@ -587,8 +655,8 @@ void Scene::buildRoom(ifstream &fin, const vector<string> &mapGrid, int mapWidth
 	float halfTileSize = tileSize / 2.0f;
 
 	// Offsets to center the map at (0,0) in world space
-	float offsetX = -(mapWidth * tileSize) / 2.0f + (tileSize / 2.0f);
-	float offsetZ = -(mapHeight * tileSize) / 2.0f + (tileSize / 2.0f);
+	offsetX = -(mapWidth * tileSize) / 2.0f + (tileSize / 2.0f);
+	offsetZ = -(mapHeight * tileSize) / 2.0f + (tileSize / 2.0f);
 
 	for (int y = 0; y < mapHeight; ++y) {
 		for (int x = 0; x < mapWidth; ++x) {
@@ -605,6 +673,7 @@ void Scene::buildRoom(ifstream &fin, const vector<string> &mapGrid, int mapWidth
 				transform = glm::scale(transform, glm::vec3(tileSize, 0.1f, tileSize));
 				instance = new TriangleMeshInstance();
 				instance->init(meshCube, glm::vec4(0.137f, 0.094f, 0.074f, 1.0f), transform, 0.1f, 0.85f);
+				instance->setCell(x, y);
 				objects.push_back(instance);
 
 				// Ceiling
@@ -613,6 +682,7 @@ void Scene::buildRoom(ifstream &fin, const vector<string> &mapGrid, int mapWidth
 				transform = glm::scale(transform, glm::vec3(tileSize, 0.1f, tileSize));
 				instance = new TriangleMeshInstance();
 				instance->init(meshCube, glm::vec4(0.525f, 0.517f, 0.478f, 1.0f), transform, 0.1f, 0.65f);
+				instance->setCell(x, y);
 				objects.push_back(instance);
 			}
 
@@ -634,6 +704,7 @@ void Scene::buildRoom(ifstream &fin, const vector<string> &mapGrid, int mapWidth
 					transform = glm::scale(transform, glm::vec3(tileSize, 2.0f, wallLength));
 					instance = new TriangleMeshInstance();
 					instance->init(meshWall, glm::vec4(1.0f), transform, 0.1f, 0.85f);
+					instance->setCell(x, y);
 					objects.push_back(instance);
 				}
 
@@ -644,6 +715,7 @@ void Scene::buildRoom(ifstream &fin, const vector<string> &mapGrid, int mapWidth
 					transform = glm::scale(transform, glm::vec3(tileSize, 2.0f, wallLength));
 					instance = new TriangleMeshInstance();
 					instance->init(meshWall, glm::vec4(1.0f), transform, 0.1f, 0.85f);
+					instance->setCell(x, y);
 					objects.push_back(instance);
 				}
 
@@ -655,6 +727,7 @@ void Scene::buildRoom(ifstream &fin, const vector<string> &mapGrid, int mapWidth
 					transform = glm::scale(transform, glm::vec3(tileSize, 2.0f, wallLength));
 					instance = new TriangleMeshInstance();
 					instance->init(meshWall, glm::vec4(1.0f), transform, 0.1f, 0.85f);
+					instance->setCell(x, y);
 					objects.push_back(instance);
 				}
 
@@ -666,6 +739,7 @@ void Scene::buildRoom(ifstream &fin, const vector<string> &mapGrid, int mapWidth
 					transform = glm::scale(transform, glm::vec3(tileSize, 2.0f, wallLength));
 					instance = new TriangleMeshInstance();
 					instance->init(meshWall, glm::vec4(1.0f), transform, 0.1f, 0.85f);
+					instance->setCell(x, y);
 					objects.push_back(instance);
 				}
 			}
@@ -693,6 +767,7 @@ void Scene::buildRoom(ifstream &fin, const vector<string> &mapGrid, int mapWidth
 		transform = glm::rotate(transform, PI, glm::vec3(0.0f, 1.0f, 0.0f));
 		instance = new TriangleMeshInstance();
 		instance->init(meshFigurines[figurine_type], glm::vec4(1.0f), transform, 0.15f, 0.4f);
+		instance->setCell(std::round(tx), std::round(tz));
 		objects.push_back(instance);
 
 		if (ty > 0.0) {
@@ -702,6 +777,7 @@ void Scene::buildRoom(ifstream &fin, const vector<string> &mapGrid, int mapWidth
 			transform = glm::scale(transform, glm::vec3(0.5f, 0.75f, 0.5f));
 			instance = new TriangleMeshInstance();
 			instance->init(meshBase, glm::vec4(1.0f), transform, 0.15f, 0.75f);
+			instance->setCell(std::round(tx), std::round(tz));
 			objects.push_back(instance);
 		}
 	}
